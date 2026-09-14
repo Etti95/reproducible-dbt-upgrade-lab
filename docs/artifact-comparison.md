@@ -12,7 +12,7 @@ python3 scripts/run_comparison.py
 
 The runner freezes one copy of runtime-relevant source files, hashes each file, records Git provenance, and mounts that same copy read-only into two fresh containers. Runs execute sequentially locally to avoid competing for this laptop's resources. The candidate still runs if baseline validation fails, and comparison still produces a report. Phase 5 will run the same environment execution logic in independent CI jobs.
 
-Each environment runs inventory, deps, parse, seed, build, test, and a typed data export with networking disabled. Existing image tags are resolved to immutable local IDs before execution; the comparator checks each installed package against the source snapshot's lock. A stale image with a different lock fails instead of silently claiming the intended upgrade ran.
+Each environment runs inventory, deps, parse, seed, build, test, and a typed data export with networking disabled. Existing image tags are resolved to immutable local IDs before execution; the comparator checks each installed package against the source snapshot's lock and rejects extra packages in the full pip inventory. A stale image with a different lock fails instead of silently claiming the intended upgrade ran.
 
 Expected evidence structure:
 
@@ -106,6 +106,8 @@ python3 -m unittest discover -s scripts/tests -v
 ```
 
 Synthetic artifacts test missing evidence, schema changes, materialization changes, equal-count monetary changes, failed/skipped coverage, mixed invocation IDs, lock drift, harmless timing/order differences, and review-required SQL changes. These are comparator tests, not claims that real dbt versions exhibited those regressions. Phase 5 will add a labeled end-to-end failure drill to the CI demonstration.
+
+There are 21 passing comparator tests. Manifest v12 seed dependencies are handled explicitly: seeds have macro dependencies but no required node-dependency list. Missing model/test dependencies still fail. This distinction was corrected after the first genuine artifact comparison rejected both runs; the originals and the failing report were preserved.
 
 ## Reasoning checkpoint
 

@@ -4,9 +4,20 @@ Dependency and environment reproducibility are part of data transformation relia
 
 ## Current status
 
-Phase 3 complete: two digest-pinned environments plus a working SaaS dbt project. The baseline passed all five validation commands and 46 data tests. Candidate transformation validation, artifact comparison, and CI come next. Git is initialized locally; the project has not been published to GitHub.
+Phase 4 complete: two digest-pinned environments, a working SaaS dbt project, and a passing semantic compatibility comparison. Both environments passed all five dbt commands and 46 data tests. All 52 compiled model/test SQL hashes and all nine exported seed/model relations matched. Hosted GitHub Actions and the operational failure/rollback drill come next.
+
+These results were measured locally in Docker, not in hosted CI. See the [compatibility matrix](docs/compatibility_matrix.md) and [Phase 4 evidence](docs/phase4-results.md).
 
 Start with the [environment exercise](docs/environments.md), [measured results](docs/phase2-results.md), and [a real dependency failure encountered during implementation](docs/toolchain-failure.md).
+
+## Reproduce the experiment
+
+Requirements: Git, Python 3.9+ for the standard-library host scripts, and Docker with Linux/AMD64 support. The actual dbt runtime uses pinned Python 3.12.11 inside the images. Network access is needed to clone/build; validation runs offline.
+
+```bash
+git clone https://github.com/Etti95/reproducible-dbt-upgrade-lab.git
+cd reproducible-dbt-upgrade-lab
+```
 
 ```bash
 python3 scripts/environment.py baseline
@@ -22,6 +33,17 @@ python3 scripts/run_project.py baseline
 ```
 
 Expected: 6 models, 3 seeds, 46 passing data tests; eight customers and USD 660 MRR at September 7, 2026. The runner prints the new evidence directory. See [metric definitions and exercises](docs/metrics.md) and [measured baseline results](docs/phase3-results.md).
+
+Run both environments and generate the compatibility matrix:
+
+```bash
+python3 -m unittest discover -s scripts/tests -v
+python3 scripts/run_comparison.py
+```
+
+Expect 21 passing comparator tests, then `Compatibility exit=0` and a path to `report/compatibility.md`. Exit 1 means failure; exit 2 requires review. Both block promotion. Uncommitted inputs deliberately require review even when the content matches. Read [how the comparison works](docs/artifact-comparison.md) before interpreting a green result as upgrade approval.
+
+The safeguards address different risks: image digests and hashed locks fix runtime inputs; artifact/data comparison detects changed behavior; business tests establish the fixture's expected meaning. Successful SQL alone provides none of those assurances in full.
 
 An unchanged Git commit can run differently after a rebuild if package resolution or a base image changes. This lab will hold SaaS models and seed data constant while independently building a known-good dbt Core + DuckDB environment and a candidate upgrade.
 

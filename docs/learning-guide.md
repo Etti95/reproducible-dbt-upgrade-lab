@@ -28,7 +28,7 @@ Completed: three fixtures, explicit temporal/MRR rules, six documented models, a
 
 ## Phase 4 — Evidence and comparison
 
-Implement the shared runner, command-specific artifact capture, data comparison, semantic comparator, and measured compatibility matrix. Inspect real manifest nodes and execution results before defining extraction code.
+Completed: both environments ran the same frozen, committed source. The shared runner preserves command-specific artifacts and exports all seed/model data. The semantic comparator matched the graph, 52 SQL hashes, execution results, and nine typed relations. Follow [the comparison exercise](artifact-comparison.md), inspect [the measured matrix](compatibility_matrix.md), and run `python3 scripts/run_comparison.py`. Twenty-one comparator tests cover success, failure, and review decisions.
 
 ## Phase 5 — CI and controlled failure
 
