@@ -48,7 +48,7 @@ Export deterministic relation schemas and sorted typed rows from this small data
 | Timing difference | Information initially | Tiny fixtures and shared runners are noisy |
 | Invocation IDs, timestamps, absolute paths, JSON ordering | Exclude from equality, retain original evidence | These describe a run rather than transformation semantics |
 
-Normalize arrays representing sets, select stable fields, and hash compiled SQL after only line-ending/trailing-whitespace normalization. Do not strip arbitrary SQL whitespace or literals: that can conceal meaningful changes. Compare unique IDs, names, resource types, dependencies, configuration materializations, relation names, and selected metadata explicitly. Raw JSON diff produces noise and provides no severity or missing-evidence policy.
+Normalize arrays representing sets and select stable fields. The implemented comparator hashes exact compiled SQL bytes, preserving whitespace because it can occur inside literals. Compare unique IDs, names, resource types, dependencies, configuration materializations, relation names, and selected metadata explicitly. Raw JSON diff produces noise and provides no severity or missing-evidence policy.
 
 The comparison job runs even if an environment fails and uploads its report before returning a failing status. Matrix fail-fast is disabled so both sides retain diagnostic evidence. Review-needed results block automated promotion; they are not mislabeled as proven incompatibility. Any exception must be narrow, documented, and tied to the reviewed commit and evidence.
 

@@ -59,7 +59,13 @@ def normalize_manifest(manifest, compiled):
         config = node['config']
         require(isinstance(config['materialized'], str) and config['enabled'] is True,
                 f'Missing materialization or disabled node: {uid}')
-        dependencies = node['depends_on']['nodes']
+        # Manifest v12 SeedNode uses MacroDependsOn, without a nodes property.
+        # Do not apply this default to models/tests: their missing DAG is invalid.
+        if resource == 'seed':
+            dependencies = node['depends_on'].get('nodes', [])
+        else:
+            require('nodes' in node['depends_on'], f'Missing node dependencies: {uid}')
+            dependencies = node['depends_on']['nodes']
         require(isinstance(dependencies, list) and all(d in manifest['nodes'] for d in dependencies),
                 f'Unknown dependency in {uid}')
         relation = node['relation_name']
@@ -133,11 +139,23 @@ def load_run(path, environment, policy):
             == files['environments/compatibility-policy.json'], 'Policy file hash mismatch')
     pins = dict(re.findall(r'^([A-Za-z0-9_.-]+)(?:\[[^\]]+\])?==([^\s\\]+)', lock_bytes.decode(), re.M))
     require(pins and runtime['packages'] == pins, 'Installed inventory differs from locked package versions')
+    freeze_lines = (path / 'environment/pip-freeze.txt').read_text().splitlines()
+    freeze = {}
+    for line in freeze_lines:
+        match = re.fullmatch(r'([A-Za-z0-9_.-]+)==([^\s]+)', line)
+        require(match is not None, f'Unsupported pip inventory entry: {line}')
+        name = re.sub(r'[-_.]+', '-', match[1]).lower()
+        require(name not in freeze, f'Duplicate pip inventory package: {name}')
+        freeze[name] = match[2]
+    complete_expected = {re.sub(r'[-_.]+', '-', k).lower(): v for k, v in pins.items()}
+    complete_expected['pip'] = policy['pip']
+    require(freeze == complete_expected, 'Full pip inventory contains unexpected/missing packages or versions')
     for name, version in policy['direct_dependencies'][environment].items():
         require(pins[name] == version, f'Unexpected {name} version: {pins[name]}')
     version = pins['dbt-core']
     image = read(path / 'image-inspect.json')
-    require(image['Os'] == 'linux' and image['Architecture'] == 'amd64' and image['Id'].startswith('sha256:'),
+    require(image['Os'] == 'linux' and image['Architecture'] == 'amd64'
+            and isinstance(image['Id'], str) and image['Id'].startswith('sha256:'),
             'Unexpected image platform or absent image ID')
     require(f'LAB_ENVIRONMENT={environment}' in image['Config']['Env'], 'Image environment label mismatch')
     commands = read(path / 'commands.json')
@@ -174,6 +192,7 @@ def load_run(path, environment, policy):
     data = read(path / 'data.json')
     require(data['schema_version'] == 1, 'Unknown data export schema')
     relations = data['relations']
+    require(isinstance(relations, dict), 'Exported relations must be an object')
     expected = {k for k, n in graph.items() if n['resource_type'] in ('model', 'seed')}
     require(set(relations) == expected, 'Missing or extra exported relations')
     for uid, relation in relations.items():
@@ -264,6 +283,9 @@ def compare(baseline, candidate, policy):
                        'Review', 'High', ['Commit the inputs and rerun before promotion.'])
     report.add('Python', a['runtime']['python'], b['runtime']['python'], 'Match', 'Info')
     report.add('Platform', a['runtime']['machine'], b['runtime']['machine'], 'Match', 'Info')
+    for package in ('dbt-duckdb', 'duckdb'):
+        if package in a['runtime']['packages'] and package in b['runtime']['packages']:
+            report.add(package, a['runtime']['packages'][package], b['runtime']['packages'][package], 'Match', 'Info')
     packages_a, packages_b = a['runtime']['packages'], b['runtime']['packages']
     changed = {k: (packages_a.get(k), packages_b.get(k)) for k in packages_a.keys() | packages_b.keys()
                if packages_a.get(k) != packages_b.get(k)}
@@ -284,6 +306,7 @@ def compare(baseline, candidate, policy):
                         {k: n[field] for k, n in b['graph'].items()}, severity)
     report.equality('Selected manifest metadata', a['metadata'], b['metadata'])
     report.equality('Compiled SQL hashes (models and tests)', a['sql'], b['sql'], review=True)
+    report.add('Compiled SQL nodes checked', len(a['sql']), len(b['sql']), 'Info', 'Info')
     report.equality('Model/test documentation', a['documentation'], b['documentation'], review=True)
     for command in ('seed', 'build', 'test'):
         report.equality(f'{command} node statuses and test failures', a['results'][command], b['results'][command], 'Critical')
@@ -296,6 +319,9 @@ def compare(baseline, candidate, policy):
     for field, label in [('columns', 'Column names/types'), ('row_count', 'Row counts'), ('rows_sha256', 'Typed data contents')]:
         report.equality(label, {k: n[field] for k, n in a['relations'].items()},
                         {k: n[field] for k, n in b['relations'].items()})
+    for uid in sorted(a['relations'].keys() & b['relations'].keys()):
+        ac, bc = a['relations'][uid]['row_count'], b['relations'][uid]['row_count']
+        report.add(f'Rows: {uid.rsplit(".", 1)[-1]}', ac, bc, 'Match' if ac == bc else 'Fail', 'High')
     # Add concrete row samples without dumping entire tables into a failure report.
     for uid in a['relations'].keys() & b['relations'].keys():
         ar, br = a['relations'][uid], b['relations'][uid]

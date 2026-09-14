@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "python": "3.12.11",
+  "pip": "25.0.1",
   "machine": "x86_64",
   "adapter": "duckdb",
   "project": "reproducible_dbt_upgrade_lab",

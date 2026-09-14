@@ -1,5 +1,4 @@
 """Small synthetic artifacts exercise decision boundaries, not dbt's implementation."""
-import copy
 import hashlib
 import json
 from pathlib import Path
@@ -18,7 +17,7 @@ class ComparisonTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         self.policy = {
-            'schema_version': 1, 'python': '3.12.11', 'machine': 'x86_64', 'adapter': 'duckdb',
+            'schema_version': 1, 'python': '3.12.11', 'pip': '25.0.1', 'machine': 'x86_64', 'adapter': 'duckdb',
             'project': 'lab', 'expected_counts': {'model': 1, 'seed': 1, 'test': 1, 'analysis': 1},
             'direct_dependencies': {'baseline': {'dbt-core': '1.10.11'}, 'candidate': {'dbt-core': '1.10.13'}},
             'allowed_package_changes': ['dbt-core']}
@@ -46,6 +45,7 @@ class ComparisonTests(unittest.TestCase):
                 'packages': {'dbt-core': version}, 'lock_sha256': files[f'environments/{env}/requirements.txt']})
             for name in ('python-version', 'dbt-version', 'pip-freeze', 'pip-check'):
                 (p / f'environment/{name}.txt').write_text('captured\n')
+            (p / 'environment/pip-freeze.txt').write_text(f'dbt-core=={version}\npip==25.0.1\n')
             commands = {}
             for command in COMMANDS:
                 target = p / command
@@ -65,7 +65,8 @@ class ComparisonTests(unittest.TestCase):
                         'unique_id': uid, 'resource_type': kind, 'name': 'example',
                         'config': {'materialized': {'model': 'table', 'seed': 'seed', 'test': 'test', 'analysis': 'view'}[kind],
                                    'enabled': True},
-                        'depends_on': {'nodes': ['seed.lab.example'] if kind == 'model' else []},
+                        'depends_on': {'macros': []} if kind == 'seed' else
+                                      {'nodes': ['seed.lab.example'] if kind == 'model' else []},
                         'relation_name': f'"lab"."analytics"."{kind}"' if kind in ('model', 'seed') else None,
                         'description': 'description', 'columns': {}, 'compiled': True, 'compiled_code': 'select 1'}
                 meta = {'dbt_schema_version': MANIFEST_SCHEMA, 'dbt_version': version,
@@ -109,6 +110,10 @@ class ComparisonTests(unittest.TestCase):
 
     def test_missing_artifact_fails(self):
         (self.root / 'candidate/build/target/run_results.json').unlink()
+        self.assertEqual(self.report().exit_code, 1)
+
+    def test_missing_model_dependencies_fail(self):
+        self.mutate('build/target/manifest.json', lambda d: d['nodes']['model.lab.example']['depends_on'].pop('nodes'))
         self.assertEqual(self.report().exit_code, 1)
 
     def test_unknown_schema_fails(self):
@@ -187,6 +192,11 @@ class ComparisonTests(unittest.TestCase):
 
     def test_runtime_lock_mismatch_fails(self):
         self.mutate('environment/runtime.json', lambda d: d.update(lock_sha256='bad'))
+        self.assertEqual(self.report().exit_code, 1)
+
+    def test_extra_installed_package_fails(self):
+        with (self.root / 'candidate/environment/pip-freeze.txt').open('a') as file:
+            file.write('dbt==2.0.0\n')
         self.assertEqual(self.report().exit_code, 1)
 
     def test_failing_report_is_written(self):
