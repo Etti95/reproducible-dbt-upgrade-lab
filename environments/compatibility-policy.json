@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "python": "3.12.11",
+  "machine": "x86_64",
+  "adapter": "duckdb",
+  "project": "reproducible_dbt_upgrade_lab",
+  "expected_counts": {"model": 6, "seed": 3, "test": 46, "analysis": 1},
+  "direct_dependencies": {
+    "baseline": {"dbt-core": "1.10.11", "dbt-duckdb": "1.9.6", "duckdb": "1.3.2"},
+    "candidate": {"dbt-core": "1.10.13", "dbt-duckdb": "1.9.6", "duckdb": "1.3.2"}
+  },
+  "allowed_package_changes": ["dbt-core"]
+}

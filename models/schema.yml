@@ -1,0 +1,142 @@
+version: 2
+models:
+  - name: stg_customers
+    description: One row per customer. Current country and segment, with strict signup date parsing.
+    columns:
+      - name: customer_id
+        description: Stable customer identifier.
+        data_tests: [unique, not_null]
+      - name: signup_date
+        description: First eligible UTC calendar date for the customer-day population.
+        data_tests: [not_null]
+      - name: country
+        description: Current two-letter country code; historical changes are not modeled.
+        data_tests: [not_null]
+      - name: segment
+        description: Current commercial segment.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [smb, enterprise, self_serve]
+  - name: stg_subscriptions
+    description: One row per subscription interval. Monthly recurring USD value, not recognized revenue. Concurrent intervals add.
+    columns:
+      - name: subscription_id
+        description: Unique identifier for one constant-price subscription interval.
+        data_tests: [unique, not_null]
+      - name: customer_id
+        description: Owning customer; required before any population joins.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments: {to: "ref('stg_customers')", field: customer_id}
+      - name: monthly_mrr
+        description: Contracted USD MRR as decimal(18,2); no proration or FX.
+        data_tests: [nonnegative]
+      - name: plan
+        description: Product plan or additive paid addon.
+        data_tests: [not_null]
+      - name: status
+        description: Current operational status; never used to reconstruct historical MRR.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments: {values: [active, cancelled, scheduled]}
+      - name: started_at
+        description: Inclusive effective start date in UTC.
+        data_tests: [not_null]
+      - name: ended_at
+        description: Exclusive effective end date; null means open-ended.
+  - name: stg_product_events
+    description: One row per event. Timestamp strings are UTC by source contract; events outside the analysis window remain here.
+    columns:
+      - name: event_id
+        description: Unique event identifier; duplicates fail rather than silently disappearing.
+        data_tests: [unique, not_null]
+      - name: customer_id
+        description: Customer generating the event.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments: {to: "ref('stg_customers')", field: customer_id}
+      - name: event_timestamp
+        description: UTC timestamp without a timezone suffix in the source fixture.
+        data_tests: [not_null]
+      - name: event_date
+        description: UTC calendar date derived from the timestamp.
+        data_tests: [not_null]
+      - name: event_type
+        description: Login is counted as an event but not meaningful product usage.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments: {values: [login, project_created, report_exported]}
+  - name: int_customer_subscription_daily
+    description: One row per eligible customer-day, including zero-subscription days. Subscription facts are aggregated before usage joins.
+    data_tests: [unique_customer_day]
+    columns:
+      - name: customer_id
+        description: Customer eligible on this day.
+      - name: date_day
+        description: Calendar date within the inclusive fixed analysis window.
+      - name: active_subscription_count
+        description: Number of intervals effective on the day, including overlapping addons.
+        data_tests: [nonnegative]
+      - name: mrr_usd
+        description: Sum of effective contracted monthly amounts; zero for an observed customer with no effective interval.
+        data_tests: [nonnegative]
+  - name: fct_customer_daily
+    description: One row per eligible customer-day. MRR and separately aggregated usage are joined at the same grain.
+    data_tests: [unique_customer_day]
+    columns:
+      - name: customer_id
+        description: Stable customer identifier.
+      - name: date_day
+        description: UTC reporting day.
+      - name: country
+        description: Current customer country.
+      - name: segment
+        description: Current customer segment.
+      - name: active_subscription_count
+        description: Effective subscription intervals on the day.
+        data_tests: [nonnegative]
+      - name: mrr_usd
+        description: USD monthly recurring run rate on this day; summing across days does not yield revenue.
+        data_tests: [nonnegative]
+      - name: event_count
+        description: All source events on this customer-day, including logins.
+        data_tests: [nonnegative]
+      - name: meaningful_event_count
+        description: Project creations and report exports on this customer-day.
+        data_tests: [nonnegative]
+  - name: mart_customer_health
+    description: One row per customer eligible at analysis_end. Illustrative customer-success classification, not a validated churn prediction.
+    columns:
+      - name: customer_id
+        description: Customer present at analysis_end.
+        data_tests: [unique, not_null]
+      - name: as_of_date
+        description: Fixed reporting date from analysis_end.
+        data_tests: [not_null]
+      - name: country
+        description: Current customer country.
+      - name: segment
+        description: Current customer segment.
+      - name: mrr_usd
+        description: Monthly recurring USD value on as_of_date.
+        data_tests: [nonnegative]
+      - name: active_subscription_count
+        description: Number of subscription intervals effective on as_of_date.
+      - name: meaningful_events_in_window
+        description: Meaningful events from analysis_start through analysis_end inclusive, after signup.
+        data_tests: [nonnegative]
+      - name: active_days_in_window
+        description: Days with at least one meaningful event in the analysis window.
+        data_tests: [nonnegative]
+      - name: health_status
+        description: No paid MRR takes precedence; paid customers without meaningful usage need attention; others are engaged.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments: {values: [no_paid_subscription, needs_attention, engaged]}

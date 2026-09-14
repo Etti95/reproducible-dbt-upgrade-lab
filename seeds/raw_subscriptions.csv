@@ -1,0 +1,11 @@
+subscription_id,customer_id,plan,monthly_mrr,status,started_at,ended_at
+S001,C001,starter,100.00,active,2026-08-20,
+S002,C002,team,200.00,cancelled,2026-09-01,2026-09-04
+S003,C002,business,300.00,active,2026-09-04,
+S004,C003,starter,80.00,cancelled,2026-09-01,2026-09-07
+S005,C005,team,120.00,active,2026-09-01,
+S006,C005,addon,30.00,active,2026-09-03,
+S007,C006,starter,50.00,cancelled,2026-09-01,2026-09-03
+S008,C006,starter,70.00,active,2026-09-06,
+S009,C007,starter,60.00,scheduled,2026-09-08,
+S010,C008,starter,40.00,active,2026-09-05,

@@ -1,0 +1,8 @@
+version: 2
+seeds:
+  - name: raw_customers
+    description: Synthetic complete customer register; 8 customers, including one signing up September 5.
+  - name: raw_subscriptions
+    description: Synthetic complete interval history for these customers; 10 intervals, all amounts in USD.
+  - name: raw_product_events
+    description: Synthetic complete event extract; 13 events, including two outside the analysis window. Absence means no event only under this fixture contract.

@@ -1,0 +1,14 @@
+event_id,customer_id,event_timestamp,event_type
+E001,C001,2026-08-31 23:59:59,project_created
+E002,C001,2026-09-01 00:00:00,project_created
+E003,C001,2026-09-01 12:00:00,report_exported
+E004,C001,2026-09-07 23:59:59,report_exported
+E005,C001,2026-09-08 00:00:00,project_created
+E006,C002,2026-09-03 10:00:00,project_created
+E007,C002,2026-09-06 11:00:00,report_exported
+E008,C003,2026-09-06 12:00:00,project_created
+E009,C004,2026-09-02 10:00:00,login
+E010,C005,2026-09-04 10:00:00,project_created
+E011,C005,2026-09-04 11:00:00,report_exported
+E012,C006,2026-09-06 12:00:00,project_created
+E013,C007,2026-09-07 12:00:00,login

@@ -1,0 +1,9 @@
+customer_id,signup_date,country,segment
+C001,2026-08-20,SE,smb
+C002,2026-09-01,GB,enterprise
+C003,2026-09-01,US,smb
+C004,2026-09-01,SE,self_serve
+C005,2026-09-01,DE,enterprise
+C006,2026-09-01,US,smb
+C007,2026-09-01,GB,self_serve
+C008,2026-09-05,SE,smb

@@ -1,0 +1,12 @@
+.venv*/
+__pycache__/
+*.pyc
+.env
+profiles.yml
+target/
+logs/
+dbt_packages/
+*.duckdb
+*.duckdb.wal
+artifacts/*
+!artifacts/.gitkeep

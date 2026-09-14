@@ -1,0 +1,32 @@
+name: reproducible_dbt_upgrade_lab
+version: '1.0.0'
+config-version: 2
+profile: reproducible_dbt_upgrade_lab
+require-dbt-version: ['>=1.10.11', '<1.11.0']
+model-paths: [models]
+seed-paths: [seeds]
+test-paths: [tests]
+macro-paths: [macros]
+analysis-paths: [analyses]
+packages-install-path: "{{ env_var('LAB_PACKAGES_PATH', '/evidence/dbt_packages') }}"
+vars:
+  analysis_start: '2026-09-01'
+  analysis_end: '2026-09-07'
+models:
+  reproducible_dbt_upgrade_lab:
+    +persist_docs: {relation: true, columns: true}
+    staging:
+      +materialized: view
+    intermediate:
+      +materialized: view
+    marts:
+      +materialized: table
+seeds:
+  reproducible_dbt_upgrade_lab:
+    +quote_columns: false
+    raw_customers:
+      +column_types: {customer_id: varchar, signup_date: varchar, country: varchar, segment: varchar}
+    raw_subscriptions:
+      +column_types: {subscription_id: varchar, customer_id: varchar, plan: varchar, monthly_mrr: varchar, status: varchar, started_at: varchar, ended_at: varchar}
+    raw_product_events:
+      +column_types: {event_id: varchar, customer_id: varchar, event_timestamp: varchar, event_type: varchar}

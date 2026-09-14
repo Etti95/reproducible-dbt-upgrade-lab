@@ -1,0 +1,8 @@
+reproducible_dbt_upgrade_lab:
+  target: lab
+  outputs:
+    lab:
+      type: duckdb
+      path: "{{ env_var('LAB_DATABASE_PATH', '/evidence/lab.duckdb') }}"
+      schema: analytics
+      threads: 1
