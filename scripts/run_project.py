@@ -7,13 +7,13 @@ import subprocess
 from evidence import snapshot
 
 
-def run_environment(environment, source, output, provenance):
+def run_environment(environment, source, output, provenance, image_ref=None):
     output.mkdir(parents=True, exist_ok=False)
     (output / 'source.json').write_text(json.dumps(provenance, indent=2) + '\n')
     print(f'[{environment}] Evidence: {output}', flush=True)
     try:
         image = json.loads(subprocess.check_output(
-            ['docker', 'image', 'inspect', f'dbt-upgrade-lab:{environment}'], text=True))[0]
+            ['docker', 'image', 'inspect', image_ref or f'dbt-upgrade-lab:{environment}'], text=True))[0]
         (output / 'image-inspect.json').write_text(json.dumps(image, indent=2) + '\n')
         command = ['docker', 'run', '--rm', '--network=none', '--platform', 'linux/amd64',
                    '-v', f'{source}:/workspace:ro', '-v', f'{output}:/evidence',
@@ -32,10 +32,11 @@ def run_environment(environment, source, output, provenance):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('environment', choices=['baseline', 'candidate'])
+    parser.add_argument('--output', type=Path, help='New run directory; must not already contain source/result')
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
     run_id = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
-    parent = root / 'artifacts' / args.environment / 'runs' / run_id
+    parent = args.output.resolve() if args.output else root / 'artifacts' / args.environment / 'runs' / run_id
     source = parent / 'source'
     provenance = snapshot(root, source)
     raise SystemExit(run_environment(args.environment, source, parent / 'result', provenance))

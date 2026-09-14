@@ -1,0 +1,187 @@
+name: dbt compatibility
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['docs/**', 'README.md']
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      simulate_failure:
+        description: 'Inject a labeled artifact mutation so the comparison job intentionally fails'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dbt-compatibility-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  guardrails:
+    name: Comparator tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4, resolved 2026-09-14
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12.11'
+      - run: python3 -m unittest discover -s scripts/tests -v
+
+  validate:
+    name: Validate (${{ matrix.environment }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: [baseline, candidate]
+    env:
+      LAB_ENVIRONMENT: ${{ matrix.environment }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12.11'
+      - name: Build locked runtime and capture inventory
+        run: python3 scripts/environment.py "$LAB_ENVIRONMENT" --output "artifacts/ci/$LAB_ENVIRONMENT/image"
+      - name: Run the shared offline validation pipeline
+        run: python3 scripts/run_project.py "$LAB_ENVIRONMENT" --output "artifacts/ci/$LAB_ENVIRONMENT/validation"
+      - name: Retain validated baseline image for rollback
+        if: matrix.environment == 'baseline'
+        run: >-
+          python3 scripts/image_archive.py save artifacts/ci/baseline-image
+          --evidence artifacts/ci/baseline/validation/result
+      - name: Upload runtime and dbt evidence, including failed-run logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: evidence-${{ matrix.environment }}
+          path: artifacts/ci/${{ matrix.environment }}/
+          include-hidden-files: true # Explicitly copied source includes .github and .python-version; no credentials.
+          if-no-files-found: error
+          retention-days: 30
+      - name: Upload baseline image archive
+        if: success() && matrix.environment == 'baseline'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: baseline-image
+          path: artifacts/ci/baseline-image/
+          if-no-files-found: error
+          compression-level: 0 # Image is already gzip-compressed.
+          retention-days: 30
+
+  compare:
+    name: Compatibility gate
+    needs: [guardrails, validate]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12.11'
+      - name: Download both environment evidence bundles
+        continue-on-error: true # The comparator must produce a failing report if an artifact is missing.
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: evidence-*
+          path: artifacts/ci/downloads
+      - name: Compare meaningful compatibility signals
+        if: always()
+        env:
+          SIMULATE_FAILURE: ${{ inputs.simulate_failure || false }}
+        run: |
+          candidate_path=artifacts/ci/downloads/evidence-candidate/validation/result
+          if [ "$SIMULATE_FAILURE" = true ]; then
+            python3 scripts/simulate_candidate.py "$candidate_path" artifacts/ci/candidate-simulated
+            candidate_path=artifacts/ci/candidate-simulated
+          fi
+          python3 scripts/compare_artifacts.py \
+            artifacts/ci/downloads/evidence-baseline/validation/result \
+            "$candidate_path" --output artifacts/ci/report
+      - name: Publish report in the job summary
+        if: always()
+        run: |
+          if [ -f artifacts/ci/report/compatibility.md ]; then
+            cat artifacts/ci/report/compatibility.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Retain comparison and simulated evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: compatibility-report
+          path: |
+            artifacts/ci/report/
+            artifacts/ci/candidate-simulated/
+          if-no-files-found: error
+          retention-days: 30
+      - name: Require successful upstream jobs too
+        if: always()
+        env:
+          GUARDRAILS_RESULT: ${{ needs.guardrails.result }}
+          VALIDATE_RESULT: ${{ needs.validate.result }}
+        run: |
+          test "$GUARDRAILS_RESULT" = success
+          test "$VALIDATE_RESULT" = success
+
+  rollback-drill:
+    name: Rejection and baseline recovery drill
+    needs: [compare]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12.11'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: evidence-*
+          path: artifacts/ci/downloads
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: baseline-image
+          path: artifacts/ci/baseline-image
+      - name: Reject hypothetical change, restore image, and rerun baseline
+        run: >-
+          python3 scripts/failure_rollback_drill.py
+          --baseline artifacts/ci/downloads/evidence-baseline/validation/result
+          --candidate artifacts/ci/downloads/evidence-candidate/validation/result
+          --image-archive artifacts/ci/baseline-image
+          --output artifacts/ci/drill
+      - name: Publish drill outcome
+        if: always()
+        run: |
+          if [ -f artifacts/ci/drill/drill.md ]; then
+            cat artifacts/ci/drill/drill.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Retain failure and restored baseline evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: failure-rollback-drill
+          path: artifacts/ci/drill/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 30

@@ -217,6 +217,7 @@ class Report:
     def __init__(self, baseline, candidate):
         self.paths = {'baseline': str(baseline), 'candidate': str(candidate)}
         self.checks = []
+        self.simulated = False
 
     def add(self, check, baseline, candidate, result='Match', severity='High', details=None):
         self.checks.append({'check': check, 'baseline': baseline, 'candidate': candidate,
@@ -244,9 +245,10 @@ class Report:
         output.mkdir(parents=True, exist_ok=True)
         status = {0: 'COMPATIBLE', 1: 'FAIL', 2: 'REVIEW REQUIRED'}[self.exit_code]
         (output / 'compatibility.json').write_text(json.dumps(
-            {'schema_version': 1, 'status': status, 'exit_code': self.exit_code,
+            {'schema_version': 1, 'status': status, 'exit_code': self.exit_code, 'simulated': self.simulated,
              'inputs': self.paths, 'checks': self.checks}, indent=2) + '\n')
-        lines = ['# Compatibility matrix', '', f'Result: **{status}** (exit {self.exit_code}).', '',
+        title = '# SIMULATED FAILURE — compatibility matrix' if self.simulated else '# Compatibility matrix'
+        lines = [title, '', f'Result: **{status}** (exit {self.exit_code}).', '',
                  'Local or CI provenance is recorded in the input runs; this report alone is not deployment approval.', '',
                  '| Check | Baseline | Candidate | Result | Severity |', '| --- | --- | --- | --- | --- |']
         def safe(value):
@@ -263,6 +265,7 @@ class Report:
 
 def compare(baseline, candidate, policy):
     report = Report(baseline, candidate)
+    report.simulated = (Path(candidate) / 'SIMULATED.json').exists()
     runs = {}
     for environment, path in [('baseline', baseline), ('candidate', candidate)]:
         try:

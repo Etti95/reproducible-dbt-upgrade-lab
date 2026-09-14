@@ -1,11 +1,12 @@
 """Shared evidence format; no dbt or third-party imports on the host."""
 import hashlib
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
 
-SOURCE_DIRECTORIES = ('models', 'seeds', 'macros', 'tests', 'analyses', 'scripts', 'environments')
+SOURCE_DIRECTORIES = ('models', 'seeds', 'macros', 'tests', 'analyses', 'scripts', 'environments', '.github')
 SOURCE_FILES = ('dbt_project.yml', 'profiles.yml.example', '.python-version', '.dockerignore')
 
 
@@ -39,6 +40,10 @@ def snapshot(root, destination):
         raise RuntimeError('Source changed while making the snapshot; rerun')
     sha = subprocess.run(['git', 'rev-parse', 'HEAD'], cwd=root, text=True, capture_output=True)
     status = subprocess.run(['git', 'status', '--porcelain'], cwd=root, text=True, capture_output=True)
-    return {'schema_version': 1, 'files': before, 'source_sha256': digest(before),
+    ci = None
+    if os.environ.get('GITHUB_ACTIONS') == 'true':
+        ci = {'run_url': f"{os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}",
+              'run_attempt': os.environ['GITHUB_RUN_ATTEMPT'], 'event': os.environ['GITHUB_EVENT_NAME']}
+    return {'schema_version': 1, 'files': before, 'source_sha256': digest(before), 'ci': ci,
             'git_sha': sha.stdout.strip() if sha.returncode == 0 else None,
             'git_dirty': bool(status.stdout) or status.returncode != 0}

@@ -11,9 +11,10 @@ import subprocess
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("environment", choices=["baseline", "candidate"])
+    parser.add_argument("--output", type=Path)
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
-    out = root / "artifacts" / args.environment / "environment"
+    out = args.output.resolve() if args.output else root / "artifacts" / args.environment / "environment"
     out.mkdir(parents=True, exist_ok=True)
     tag = f"dbt-upgrade-lab:{args.environment}"
     command = ["docker", "build", "--platform", "linux/amd64", "--progress=plain",
