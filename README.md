@@ -4,9 +4,9 @@ Dependency and environment reproducibility are part of data transformation relia
 
 ## Current status
 
-Phase 4 complete: two digest-pinned environments, a working SaaS dbt project, and a passing semantic compatibility comparison. Both environments passed all five dbt commands and 46 data tests. All 52 compiled model/test SQL hashes and all nine exported seed/model relations matched. Hosted GitHub Actions and the operational failure/rollback drill come next.
+Phase 5 complete: locked Docker environments, a working SaaS dbt project, semantic comparison, hosted GitHub Actions, and a verified retained-image recovery drill. Both environments passed all five dbt commands and 46 data tests. All 52 compiled model/test SQL hashes and all nine exported seed/model relations matched.
 
-These results were measured locally in Docker, not in hosted CI. See the [compatibility matrix](docs/compatibility_matrix.md) and [Phase 4 evidence](docs/phase4-results.md).
+Inspect the [successful hosted workflow](https://github.com/Etti95/reproducible-dbt-upgrade-lab/actions/runs/34906995612), [deliberately failing workflow](https://github.com/Etti95/reproducible-dbt-upgrade-lab/actions/runs/34930708294), and [measured CI/recovery results](docs/phase5-results.md). The red run injected a labeled artifact mutation; it does not represent a real dbt regression. The complete migration/promotion runbook and retrospective are the final phase.
 
 Start with the [environment exercise](docs/environments.md), [measured results](docs/phase2-results.md), and [a real dependency failure encountered during implementation](docs/toolchain-failure.md).
 
@@ -41,9 +41,15 @@ python3 -m unittest discover -s scripts/tests -v
 python3 scripts/run_comparison.py
 ```
 
-Expect 21 passing comparator tests, then `Compatibility exit=0` and a path to `report/compatibility.md`. Exit 1 means failure; exit 2 requires review. Both block promotion. Uncommitted inputs deliberately require review even when the content matches. Read [how the comparison works](docs/artifact-comparison.md) before interpreting a green result as upgrade approval.
+Expect 23 passing guardrail tests, then `Compatibility exit=0` and a path to `report/compatibility.md`. Exit 1 means failure; exit 2 requires review. Both block promotion. Uncommitted inputs deliberately require review even when the content matches. Read [how the comparison works](docs/artifact-comparison.md) before interpreting a green result as upgrade approval.
 
 The safeguards address different risks: image digests and hashed locks fix runtime inputs; artifact/data comparison detects changed behavior; business tests establish the fixture's expected meaning. Successful SQL alone provides none of those assurances in full.
+
+## CI and recovery
+
+The [workflow](.github/workflows/dbt-compatibility.yml) independently builds baseline and candidate from the same Git SHA, uploads evidence even after failures, then compares it in a separate job. A recovery job rejects a copied manifest mutation, loads the checksummed baseline image archive on a fresh runner, and verifies that rerunning baseline reproduces its original outputs. See the [YAML walkthrough and reproduction commands](docs/ci-and-rollback-drill.md).
+
+Artifacts are retained for 30 days. Production rollback would need durable image/evidence retention and a separate plan for restoring changed warehouse data. The lab does not deploy to a production warehouse.
 
 An unchanged Git commit can run differently after a rebuild if package resolution or a base image changes. This lab will hold SaaS models and seed data constant while independently building a known-good dbt Core + DuckDB environment and a candidate upgrade.
 

@@ -32,7 +32,7 @@ Completed: both environments ran the same frozen, committed source. The shared r
 
 ## Phase 5 — CI and controlled failure
 
-Run the two images from the same checkout in Actions. Collect evidence even after failures. Demonstrate a passing genuine comparison and a failing labeled mutation, with exact diagnostic and rollback evidence.
+Completed in hosted Actions: independent image builds from the same SHA, retained command artifacts, a passing genuine comparison, and a deliberate red comparison run. The normal run also restored the checksummed baseline image on a fresh runner and reproduced baseline outputs. See [the CI walkthrough](ci-and-rollback-drill.md) and [measured hosted results](phase5-results.md), including links to both runs. There are now 23 guardrail tests: 21 comparator checks and two drill/archive checks.
 
 ## Phase 6 — Migration and operations
 
