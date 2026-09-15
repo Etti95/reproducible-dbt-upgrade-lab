@@ -7,7 +7,7 @@ Objective: define what must remain constant and what constitutes evidence before
 Read the architecture and inspect the scaffold:
 
 ```bash
-cd /Users/richmore/Desktop/projects/vcontrol
+cd reproducible-dbt-upgrade-lab
 find . -maxdepth 3 -type f | sort
 cat docs/incident-context.md
 ```
@@ -36,4 +36,26 @@ Completed in hosted Actions: independent image builds from the same SHA, retaine
 
 ## Phase 6 — Migration and operations
 
-Complete the eleven-section runbook with measured versions and real evidence paths. Practice rollback, finalize the five-minute README, then write the retrospective and interview explanation. GitHub publication and hosted CI evidence require an available GitHub repository/account; local logs will never be described as hosted CI results.
+Completed: the [eleven-section migration runbook](migration_runbook.md), exact recovery references, [rehearsal evidence](phase6-results.md), five-minute README, and [retrospective/interview explanation](engineering-retrospective.md). The project is public on GitHub with genuine hosted success and intentional-failure runs. Production promotion remains outside the lab scope.
+
+## Fifteen concepts to explain after completing the lab
+
+| Concept | Explanation grounded in this project |
+| --- | --- |
+| 1. Unpinned dependencies | A resolver can choose different versions or package contents at a later build; no SQL edit is needed. |
+| 2. Same Git commit | Git fixes committed inputs, not future PyPI resolution or mutable base tags. |
+| 3. Source vs environment reproducibility | Source hashes identify the models/fixtures; locks, platform, interpreter and image references identify runtime inputs. Both are recorded separately. |
+| 4. Docker's boundary | It isolates and packages userspace. A Dockerfile with mutable inputs remains a changing build recipe. |
+| 5. Mutable Python tags | A tag such as python:3.12 can refer to a new patch/base build. The lab pins a patch and an immutable platform image digest. |
+| 6. Adapter/Core compatibility | The adapter implements warehouse behavior through dbt interfaces. Compatible metadata constraints do not replace import and execution tests. |
+| 7. Early parse | Parse checks project structure, configuration, ref dependencies and Jinja before materializing data; it is a cheap first compatibility signal. |
+| 8. Integration through build | Build executes the dependency-ordered project, including materializations and tests, exposing integration failures parse cannot. |
+| 9. Manifest meaning | It describes resources, selected configuration, dependencies and compiled code for executed nodes. Presence in the manifest does not prove execution. |
+| 10. Run results meaning | It records a particular command's executed node statuses, test failures and timing. A later invocation must not overwrite the evidence being compared. |
+| 11. Artifact comparison | It reveals structural/compiled-contract changes despite successful SQL; typed exports additionally test data equivalence. |
+| 12. Pinning vs locking | Exact direct pins constrain requested packages. A complete transitive lock with hashes fixes the approved closure and verifies allowed distribution bytes. |
+| 13. Automatic failures | Missing evidence, nonzero commands, missing/skipped tests, unexpected runtime, graph/materialization/schema changes, or data mismatches fail closed. |
+| 14. Human review | Compiled SQL or documentation changes and uncommitted provenance block promotion for review; timing noise alone remains informational. |
+| 15. Safe rollout | Review a deliberate lock change, validate fixed inputs, retain tested images/evidence, run an isolated canary, cut over one writer, monitor, and recover by immutable reference if needed. |
+
+Final reasoning exercise: suppose both environments produce the same USD 660 total, but one customer's MRR is overstated by 10 and another's understated by 10. The aggregate reconciles; the typed customer-level comparison must still fail. Explain which controls catch this and why an immutable image alone cannot.

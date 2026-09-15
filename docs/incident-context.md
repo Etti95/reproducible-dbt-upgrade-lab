@@ -15,8 +15,8 @@ The migration documentation linked by PyPI could not be retrieved during this ch
 ## Lab assumptions and boundaries
 
 - Baseline represents an approved production environment, not a claim about the user's real production stack.
-- Baseline and candidate will both use explicitly pinned `dbt-core`, `dbt-duckdb`, and `duckdb`. Exact versions are deliberately pending metadata inspection and installation tests.
+- Baseline and candidate use explicitly pinned `dbt-core`, `dbt-duckdb`, and `duckdb`. Verified choices are Core 1.10.11/1.10.13, adapter 1.9.6, and engine 1.3.2; see the environment and hosted results documents.
 - We will not describe a Core-to-Core upgrade as a reproduction of the Cloud CLI-to-v2 transition.
-- A separately labeled controlled artifact mutation will demonstrate detection if both genuine environments pass.
+- Both genuine environments passed. A separately labeled controlled artifact mutation demonstrated rejection in hosted CI.
 - A clean installation or upgrade can resolve differently when its allowed dependency set changes. A plain install into an already satisfied environment does not necessarily upgrade it.
 - Runtime drift is possible without SQL or Git changes. The incident illustrates this mechanism; compatibility must still be measured.

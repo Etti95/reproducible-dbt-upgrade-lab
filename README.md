@@ -1,102 +1,98 @@
 # Reproducible dbt Upgrade Lab
 
-Dependency and environment reproducibility are part of data transformation reliability.
+**Dependency and environment reproducibility are part of data transformation reliability.** An unchanged Git commit can behave differently after a rebuild if its CLI, transitive dependencies or base image changes.
 
-## Current status
+This completed lab runs the same SaaS subscription models and fixtures in two isolated dbt Core + DuckDB environments, compares behavior, and rehearses recovery from a retained image.
 
-Phase 5 complete: locked Docker environments, a working SaaS dbt project, semantic comparison, hosted GitHub Actions, and a verified retained-image recovery drill. Both environments passed all five dbt commands and 46 data tests. All 52 compiled model/test SQL hashes and all nine exported seed/model relations matched.
+## Problem and scope
 
-Inspect the [successful hosted workflow](https://github.com/Etti95/reproducible-dbt-upgrade-lab/actions/runs/34906995612), [deliberately failing workflow](https://github.com/Etti95/reproducible-dbt-upgrade-lab/actions/runs/34930708294), and [measured CI/recovery results](docs/phase5-results.md). The red run injected a labeled artifact mutation; it does not represent a real dbt regression. The complete migration/promotion runbook and retrospective are the final phase.
+The motivating incident is PyPI's announcement that the `dbt` package name changes from the Cloud CLI to dbt v2 starting September 14, 2026. An unpinned `pip install dbt` can therefore change tool identity without a SQL change. The announcement was verified; this lab does not claim to have observed a fresh resolver switch. See [facts and assumptions](docs/incident-context.md).
 
-Start with the [environment exercise](docs/environments.md), [measured results](docs/phase2-results.md), and [a real dependency failure encountered during implementation](docs/toolchain-failure.md).
+The working experiment is a deliberate **Core 1.10.11 → 1.10.13** upgrade, not a Cloud CLI-to-v2 migration. These are historical lab versions, not a recommendation for a new production stack.
 
-## Reproduce the experiment
+| Component | Baseline | Candidate |
+| --- | --- | --- |
+| Python / platform | 3.12.11 / linux/amd64 | Same |
+| dbt Core | 1.10.11 | 1.10.13 |
+| DuckDB adapter / engine | 1.9.6 / 1.3.2 | Same |
+| Dependency closure | 54 hashed package pins | Only Core differs |
 
-Requirements: Git, Python 3.9+ for the standard-library host scripts, and Docker with Linux/AMD64 support. The actual dbt runtime uses pinned Python 3.12.11 inside the images. Network access is needed to clone/build; validation runs offline.
+Both Dockerfiles pin the Python image digest. Runtime installs require package hashes and wheels. Docker packages the environment; mutable Dockerfile inputs would still produce mutable builds.
+
+## Measured results
+
+- [Successful hosted CI](https://github.com/Etti95/reproducible-dbt-upgrade-lab/actions/runs/34906995612): both environments passed deps/parse/seed/build/test and **46 distinct dbt tests**; all **52 compiled model/test SQL hashes** and **nine typed relation exports** matched.
+- [Intentional red CI](https://github.com/Etti95/reproducible-dbt-upgrade-lab/actions/runs/34930708294): both environments passed dbt, but a labeled copied-manifest `table → view` mutation failed the compatibility gate.
+- The successful run restored the checksummed baseline image on a fresh runner, reran validation without rebuilding, and reproduced the original outputs. **23 guardrail tests** also passed.
+
+Read the [compatibility matrix](docs/ci-compatibility-matrix.md), [failure matrix](docs/simulated-failure-matrix.md), and [hosted evidence](docs/phase5-results.md). The injected mutation is simulated; image restoration is real. No production system was deployed.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    G[Same Git SHA + fixtures + fixed dates] --> B[Baseline image and lock]
+    G --> C[Candidate image and lock]
+    B --> BV[deps / parse / seed / build / test]
+    C --> CV[deps / parse / seed / build / test]
+    BV --> BA[Runtime + artifacts + typed data]
+    CV --> CA[Runtime + artifacts + typed data]
+    BA --> R[Semantic compatibility gate]
+    CA --> R
+    R --> D[Simulated rejection + retained-image recovery]
+```
+
+Three seeds feed three staging views, `int_customer_subscription_daily`, `fct_customer_daily`, and `mart_customer_health`. Subscription intervals are start-inclusive/end-exclusive; MRR and usage are aggregated independently before joining. Edge cases cover plan changes, cancellation, concurrent addons, reactivation and inactive customers. [Metric definitions](docs/metrics.md)
+
+## Run it
+
+Requirements: Git, Python 3.9+ for standard-library host scripts, and Docker with Linux/AMD64 support. dbt itself runs with pinned Python 3.12.11 inside containers. Image builds need network access; validation runs offline.
 
 ```bash
 git clone https://github.com/Etti95/reproducible-dbt-upgrade-lab.git
 cd reproducible-dbt-upgrade-lab
-```
-
-```bash
 python3 scripts/environment.py baseline
 python3 scripts/environment.py candidate
-```
 
-These commands build and inspect each runtime. They require a running Docker daemon and network access during image builds. Both currently verify 54 locked packages; only dbt Core differs (1.10.11 → 1.10.13).
+# Inspect installed reality.
+cat artifacts/baseline/environment/dbt-version.txt
+cat artifacts/candidate/environment/pip-freeze.txt
 
-Run the baseline transformations:
-
-```bash
+# Run either environment independently.
 python3 scripts/run_project.py baseline
-```
+python3 scripts/run_project.py candidate
 
-Expected: 6 models, 3 seeds, 46 passing data tests; eight customers and USD 660 MRR at September 7, 2026. The runner prints the new evidence directory. See [metric definitions and exercises](docs/metrics.md) and [measured baseline results](docs/phase3-results.md).
-
-Run both environments and generate the compatibility matrix:
-
-```bash
+# Run both from one frozen snapshot and compare.
 python3 -m unittest discover -s scripts/tests -v
 python3 scripts/run_comparison.py
 ```
 
-Expect 23 passing guardrail tests, then `Compatibility exit=0` and a path to `report/compatibility.md`. Exit 1 means failure; exit 2 requires review. Both block promotion. Uncommitted inputs deliberately require review even when the content matches. Read [how the comparison works](docs/artifact-comparison.md) before interpreting a green result as upgrade approval.
+Expect 23 passing guardrail tests, `Compatibility exit=0`, and a printed report path under `artifacts/comparisons/<run-id>/report/`. Each environment produces eight customer-health rows and **USD 660.00 MRR** at September 7. Exit 1 fails; exit 2 requires review. Uncommitted inputs deliberately require review.
 
-The safeguards address different risks: image digests and hashed locks fix runtime inputs; artifact/data comparison detects changed behavior; business tests establish the fixture's expected meaning. Successful SQL alone provides none of those assurances in full.
+The comparator validates evidence completeness, schemas and execution coverage before comparing selected graph/configuration fields, exact compiled SQL hashes, statuses and typed data. Timestamps and invocation IDs are not blindly diffed; invocation IDs still detect mixed files within a run. [Inspection exercises and diagnostics](docs/artifact-comparison.md)
 
-## CI and recovery
+## CI, promotion and rollback
 
-The [workflow](.github/workflows/dbt-compatibility.yml) independently builds baseline and candidate from the same Git SHA, uploads evidence even after failures, then compares it in a separate job. A recovery job rejects a copied manifest mutation, loads the checksummed baseline image archive on a fresh runner, and verifies that rerunning baseline reproduces its original outputs. See the [YAML walkthrough and reproduction commands](docs/ci-and-rollback-drill.md).
+[GitHub Actions](.github/workflows/dbt-compatibility.yml) builds the two environments independently from one SHA, retains evidence even after failures, and compares it in a separate job. A recovery job loads the exact retained baseline image. Actions use commit SHAs; dependency locks are consumed, not regenerated, during validation. [YAML walkthrough](docs/ci-and-rollback-drill.md)
 
-Artifacts are retained for 30 days. Production rollback would need durable image/evidence retention and a separate plan for restoring changed warehouse data. The lab does not deploy to a production warehouse.
+The [migration runbook](docs/migration_runbook.md) gives exact versions, acceptance/rejection criteria, tested recovery commands and post-deployment checks. Rollback binds the image/archive checksum to the original Git revision, locks and inputs. It does not mean installing a vaguely specified older version, and it does not automatically undo changed warehouse data.
 
-An unchanged Git commit can run differently after a rebuild if package resolution or a base image changes. This lab will hold SaaS models and seed data constant while independently building a known-good dbt Core + DuckDB environment and a candidate upgrade.
+Hosted artifacts have 30-day retention. Durable image/evidence retention and a separate data restore plan are required before production promotion. The candidate passed this lab; there is no claimed production approval.
 
-See [verified incident context](docs/incident-context.md), [architecture and decisions](docs/architecture.md), and [the phased learning guide](docs/learning-guide.md).
-
-```mermaid
-flowchart LR
-    G[Same Git SHA + seeds + fixed analysis dates] --> B[Baseline image and lock]
-    G --> C[Candidate image and lock]
-    B --> BV[deps / parse / seed / build / test]
-    C --> CV[deps / parse / seed / build / test]
-    BV --> BA[Command artifacts + runtime inventory + data exports]
-    CV --> CA[Command artifacts + runtime inventory + data exports]
-    BA --> R[Semantic comparison + compatibility matrix]
-    CA --> R
-    R --> D[Reject / review / approve for promotion]
-```
-
-## Planned repository
+## Repository and learning path
 
 ```text
-README.md
-dbt_project.yml             # One shared transformation project
-profiles.yml.example        # Credential-free local DuckDB profile
-models/{staging,intermediate,marts}/
-seeds/                     # Fixed, version-controlled source fixtures
-macros/                    # Small, inspectable shared SQL logic
-tests/                     # Business invariant data tests
-scripts/                   # Shared runner, data export, semantic comparator
-environments/{baseline,candidate}/
-  Dockerfile
-  requirements.in          # Exact direct dependency intent
-  requirements.txt         # Generated transitive lock with hashes
-artifacts/                 # Ignored generated evidence, split by environment/command
-docs/                      # Architecture, guided exercises, migration and rollback
-.github/workflows/dbt-compatibility.yml
+models/ + seeds/ + macros/ + tests/    shared transformation project
+analyses/                            inspectable business readout
+scripts/                             build, validate, compare, simulate, restore
+scripts/tests/                       comparator and recovery guardrails
+environments/{baseline,candidate}/   Dockerfiles, direct pins, hashed locks
+environments/toolchain/             locked pip-tools compiler
+artifacts/                           ignored generated evidence/databases
+docs/                                definitions, exercises, reports, runbook
+.github/workflows/                   hosted compatibility and recovery
 ```
 
-We use this workspace as the repository root rather than adding another nested project directory. Files listed above are planned unless already present.
+Follow the [six-phase learning guide](docs/learning-guide.md), [architecture decisions](docs/architecture.md), and [retrospective/interview explanation](docs/engineering-retrospective.md).
 
-## Learning sequence
-
-1. Architecture: define controlled variables and evidence.
-2. Environments: verify version pairs; generate locks; build and inspect images.
-3. Analytics: implement and validate subscription/customer-day metrics.
-4. Evidence: run both environments and compare artifacts and data.
-5. CI and failure drill: execute the same runner in Actions; prove rejection works.
-6. Operations: finish migration/rollback runbooks and the engineering retrospective.
-
-Commands and measured example results will be added as each phase is executed. No hypothetical results will be presented as successful validation.
+The main lessons: an identical source revision is not an identical runtime; a reproducible environment can still be wrong; and passing SQL does not prove unchanged behavior. Locks/digests control inputs, artifact/data comparison evaluates changes, and business tests establish the intended metric meaning.

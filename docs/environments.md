@@ -91,3 +91,37 @@ At this phase, rebuilding baseline uses its retained Dockerfile, base digest, an
 ## Reasoning checkpoint
 
 If the candidate changes only `dbt-core` in `requirements.in`, but ten transitive packages change in its lock, what are you testing? The whole changed environment. Investigate those extra changes, preserve compatible baseline pins where possible, and describe the true scope in the upgrade report.
+
+## Why this package-management approach
+
+A filename does not determine reproducibility: `requirements.txt` can contain unbounded ranges or a complete hash-locked dependency set. Inspect its contents and the installation command.
+
+| Option | What it provides | Limit / reason for this lab's choice |
+| --- | --- | --- |
+| Handwritten requirements | Simple package names and exact direct pins | Direct pins alone leave transitive resolution open |
+| [Constraints file](https://pip.pypa.io/en/stable/user_guide/#constraints-files) | Bounds versions for packages requested elsewhere | Does not request installation or inherently lock every transitive dependency |
+| [pip-tools](https://pip-tools.readthedocs.io/en/stable/) | Compiles readable direct intent into resolved pip-compatible requirements with hashes | Lock generation must use the intended interpreter/platform and a tested compiler toolchain; chosen here for transparency |
+| [Poetry](https://python-poetry.org/docs/basic-usage/) | Project/dependency management with a resolver and lock | Useful for a broader Python application; adds a workflow this small dbt lab does not need |
+| [uv](https://docs.astral.sh/uv/concepts/projects/sync/) | Environment/dependency management and lock/compile workflows | Also a valid choice; introducing a second resolver would add another variable here |
+| Lockfile | Records an approved resolved dependency set; format may also capture hashes/platform rules | Must actually be consumed in a locked install; it cannot ensure artifacts remain hosted forever |
+| Docker image digest | Identifies an immutable registry image manifest for retrieval | Requires image availability; does not establish SQL correctness or restore changed data |
+
+The risky recipe is:
+
+```dockerfile
+RUN pip install dbt
+```
+
+Explicit direct pins improve package identity and scope, but still leave transitives unresolved:
+
+```dockerfile
+RUN pip install dbt-core==1.10.11 dbt-duckdb==1.9.6 duckdb==1.3.2
+```
+
+The actual lab consumes the complete reviewed lock:
+
+```dockerfile
+RUN python -m pip install --no-cache-dir --require-hashes --only-binary=:all: -r /opt/lab/requirements.txt
+```
+
+Combined with the digest-pinned base image and explicit platform, this controls the installation inputs. Keeping the built image provides the recovery path when dependency servers are unavailable. See the [migration runbook](migration_runbook.md) for the exact retained image and archive references.

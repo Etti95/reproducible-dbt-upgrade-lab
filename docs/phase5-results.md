@@ -62,7 +62,7 @@ Downloaded locally for verification under `artifacts/hosted/34906995612/` (exclu
 
 The Core upgrade passed the lab's genuine checks. The materialization mutation was intentionally fabricated in copied artifacts to exercise rejection. It is not a real regression in either dbt release. Image restoration and post-restore dbt execution were real.
 
-For the full YAML explanation, local reproduction commands, and diagnostics, see [CI and rollback walkthrough](ci-and-rollback-drill.md). The next phase is the complete migration/promotion runbook and engineering retrospective.
+For the full YAML explanation, local reproduction commands, and diagnostics, see [CI and rollback walkthrough](ci-and-rollback-drill.md). The completed [migration runbook](migration_runbook.md) and [engineering retrospective](engineering-retrospective.md) describe adoption and remaining production boundaries.
 
 ## Deliberately failing hosted run
 

@@ -8,7 +8,7 @@ Source reproducibility means retrieving the same models, macros, configuration, 
 
 Both jobs use one Git SHA, the same source fixtures, fixed analysis dates, timezone, thread count, profile target name, and logical database name. Only declared environment dependencies change. Separate containers and database files prevent one run from inheriting another's state. Both database files use the same basename in separate directories so DuckDB catalog naming does not introduce avoidable relation-name differences.
 
-Choose one canonical container platform (planned: linux/amd64) and one exact Python patch release for both environments in Phase 2. Native developer installations are convenient diagnostics, but canonical evidence comes from the specified container platform. Record the architecture rather than assuming every platform is equivalent.
+Both environments use linux/amd64 and Python 3.12.11. Native developer installations are convenient diagnostics, but canonical evidence comes from the specified container platform. Record the architecture rather than assuming every platform is equivalent.
 
 ## Dependencies and images
 
@@ -16,7 +16,7 @@ Use pip-tools to generate `requirements.txt` with the complete resolved dependen
 
 An exact `dbt-core` pin alone leaves its adapter and transitive dependencies free to change. A constraints file restricts versions but does not itself request installation. Poetry and uv can manage project environments and locks; pip-tools keeps this small lab close to ordinary pip workflows. We need one implemented approach, not competing package managers.
 
-Each Dockerfile will use a verified Python patch tag plus immutable image digest. Tags, including `python:3.12`, can move. Docker isolates and packages a runtime, but rebuilding a Dockerfile with mutable inputs can produce different bytes. Record the built image digest and preserve the image; a lockfile cannot guarantee that a package server will retain downloadable artifacts forever. Avoid unpinned operating-system installs and runtime extension downloads.
+Each Dockerfile uses a verified Python patch tag plus immutable image digest. Tags, including `python:3.12`, can move. Docker isolates and packages a runtime, but rebuilding a Dockerfile with mutable inputs can produce different bytes. Record the built image digest and preserve the image; a lockfile cannot guarantee that a package server will retain downloadable artifacts forever. Avoid unpinned operating-system installs and runtime extension downloads.
 
 ## Small, meaningful analytics DAG
 
@@ -56,8 +56,8 @@ The comparison job runs even if an environment fails and uploads its report befo
 
 Preserve real run artifacts. Copy candidate evidence to a separate simulation directory and deliberately change one model materialization. The comparator must identify the exact node and return a failing exit code. Label the resulting report SIMULATED; it demonstrates a guardrail, not an actual dbt regression. Also test missing evidence and an ordinary compatible comparison.
 
-Reject an unapproved candidate and rerun the retained baseline image by digest against an isolated database. Production retention must bind Git SHA/tag, image digest, dependency locks, seed/input snapshot identifiers, runtime inventory, artifacts and approval evidence. Tags are convenient names; digests identify image content. Environment rollback does not undo changed warehouse data: migrations that alter persistent tables also need a data restore or rebuild plan.
+Reject an unapproved candidate and rerun the retained baseline image by its immutable local image ID against an isolated database. The lab restores a checksummed Docker archive; a production registry would use its manifest digest. Production retention must bind Git SHA/tag, image digest, dependency locks, seed/input snapshot identifiers, runtime inventory, artifacts and approval evidence. Tags are convenient names; digests identify image content. Environment rollback does not undo changed warehouse data: migrations that alter persistent tables also need a data restore or rebuild plan.
 
 ## Repository design
 
-Keep one dbt project at the root and environment definitions in two folders. Duplicating models would introduce a second changing variable. Keep generated artifacts out of Git; CI retains complete evidence and the repository may later retain a clearly labeled small report example. Scripts remain separate from dbt custom SQL tests. Documentation explains decisions and operational steps rather than hiding them inside shell wrappers.
+Keep one dbt project at the root and environment definitions in two folders. Duplicating models would introduce a second changing variable. Keep generated artifacts out of Git; CI retains complete evidence and the repository retains clearly labeled small measured reports. Scripts remain separate from dbt custom SQL tests. Documentation explains decisions and operational steps rather than hiding them inside shell wrappers.
