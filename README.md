@@ -93,6 +93,6 @@ docs/                                definitions, exercises, reports, runbook
 .github/workflows/                   hosted compatibility and recovery
 ```
 
-Follow the [six-phase learning guide](docs/learning-guide.md), [architecture decisions](docs/architecture.md), and [retrospective/interview explanation](docs/engineering-retrospective.md).
+Follow the [six-phase learning guide](docs/learning-guide.md), [architecture decisions](docs/architecture.md), and [retrospective/explanation](docs/engineering-retrospective.md).
 
 The main lessons: an identical source revision is not an identical runtime; a reproducible environment can still be wrong; and passing SQL does not prove unchanged behavior. Locks/digests control inputs, artifact/data comparison evaluates changes, and business tests establish the intended metric meaning.
