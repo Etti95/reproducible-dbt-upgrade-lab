@@ -53,7 +53,7 @@ The first compiler toolchain installed but failed during hash generation, so we 
 
 These were different kinds of failures: toolchain compatibility, evidence-reader correctness, and execution configuration. Distinguishing them prevents a misleading claim that every problem was a dbt Core regression. Both genuine Core environments passed the finished lab.
 
-## Interview-ready explanation
+## TL;DR
 
 **Problem →** The same Git commit can run with a different dbt environment after dependencies or image tags change.
 
